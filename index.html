@@ -41,31 +41,64 @@
             transition: opacity 0.3s ease;
         }
         
-        /* Lightbox CSS */
+        /* --- LIGHTBOX CẢI TIẾN --- */
         #lightbox {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.9);
+            background-color: rgba(0,0,0,0.95);
             z-index: 1000;
-            overflow: auto;
+            overflow: auto; /* Cho phép cuộn khi ảnh to */
             align-items: center;
             justify-content: center;
         }
         #lightbox.active { display: flex; }
-        #lightbox img {
-            max-width: 90%;
-            max-height: 90vh;
+        
+        /* Trạng thái 1: Vừa khít màn hình */
+        #lightbox:not(.zoomed-in) img {
+            max-width: 95%;
+            max-height: 95vh;
             object-fit: contain;
+            cursor: zoom-in;
+            margin: auto;
             transition: transform 0.2s ease;
-            cursor: zoom-out;
+        }
+
+        /* Trạng thái 2: Khi được click để Phóng to (Zoomed-in) */
+        #lightbox.zoomed-in {
+            align-items: flex-start; /* Reset căn giữa để cuộn đúng */
+            justify-content: flex-start;
         }
         #lightbox.zoomed-in img {
+            width: 250vw; /* Trên mobile: Ảnh to gấp 2.5 lần màn hình để dễ đọc chữ */
             max-width: none;
             max-height: none;
             cursor: grab;
+            margin: 0; /* Xóa margin khi cuộn */
+        }
+        @media (min-width: 768px) {
+            #lightbox.zoomed-in img {
+                width: 150vw; /* Trên PC màn hình to rồi, chỉ cần to gấp 1.5 lần */
+            }
         }
         #lightbox.zoomed-in img:active { cursor: grabbing; }
+
+        /* Nút X đóng */
+        #close-btn {
+            position: fixed; /* Fixed để lúc cuộn ảnh nó không bị chạy mất */
+            top: 15px;
+            right: 15px;
+            color: white;
+            font-size: 2rem;
+            width: 45px; height: 45px;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 1010;
+            backdrop-filter: blur(4px);
+        }
+        #close-btn:hover { background: rgba(255,255,255,0.4); }
 
         .loader {
             border: 4px solid #f3f3f3; border-top: 4px solid #4f46e5; border-radius: 50%;
@@ -80,7 +113,7 @@
     <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-4 md:p-6">
         <h1 class="text-2xl md:text-3xl font-bold text-center text-gray-800 mb-2">Thời Khóa Biểu Trường THCS Vạn Linh</h1>
         
-        <!-- Hiển thị thông tin Tuần (Mặc định hiển thị) -->
+        <!-- Hiển thị thông tin Tuần -->
         <p id="tuan-info" class="text-center text-gray-600 font-medium mb-6">
             Thời khóa biểu tuần: <span id="tuan-text" class="text-indigo-600 font-bold">Đang tải...</span>
         </p>
@@ -94,143 +127,110 @@
         <!-- Image Display Area -->
         <div class="timetable-image-display bg-gray-50 rounded-xl border border-dashed border-gray-300 p-2">
             <div id="loading" class="loader hidden"></div>
-            <!-- Mặc định ẩn ảnh, nếu lỗi không có ảnh sẽ hiện chữ -->
             <img id="main-tkb-img" src="" alt="Chưa có thời khóa biểu" class="hidden" onerror="this.classList.add('hidden'); document.getElementById('error-msg').classList.remove('hidden');">
             <p id="error-msg" class="text-gray-500 hidden text-center p-8">Chưa có dữ liệu Thời khóa biểu cho buổi này.<br><span class="text-sm">Vui lòng upload ảnh lên Github.</span></p>
         </div>
     </div>
 
-    <!-- Lightbox cho tính năng Zoom -->
+    <!-- Lightbox Zoom -->
     <div id="lightbox">
+        <div id="close-btn">&times;</div>
         <img id="lightbox-img" src="" alt="Zoomed TKB">
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // CẤU HÌNH ĐƯỜNG DẪN ẢNH (Tên file bạn sẽ upload lên Github)
-            const TKB_FILES = {
-                'sang': 'sang.jpg',   // Đổi thành .png nếu bạn hay dùng ảnh png
-                'chieu': 'chieu.jpg',
-                'default': 'sang'
-            };
-            const TUAN_FILE = 'tuan.txt'; // Tên file text chứa thông tin tuần
+            const TKB_FILES = { 'sang': 'sang.jpg', 'chieu': 'chieu.jpg', 'default': 'sang' };
+            const TUAN_FILE = 'tuan.txt';
 
             const mainImg = document.getElementById('main-tkb-img');
             const errorMsg = document.getElementById('error-msg');
             const loading = document.getElementById('loading');
             const navLinks = document.querySelectorAll('.nav-link');
-            const tuanInfo = document.getElementById('tuan-info');
             const tuanText = document.getElementById('tuan-text');
 
-            // --- TẢI THÔNG TIN TUẦN TỪ FILE TEXT ---
             function loadTuanInfo() {
                 const cacheBuster = new Date().getTime();
                 fetch(`${TUAN_FILE}?v=${cacheBuster}`)
-                    .then(response => {
-                        if (!response.ok) throw new Error('Không tìm thấy file');
-                        return response.text();
-                    })
-                    .then(text => {
-                        if (text.trim() !== '') {
-                            tuanText.textContent = text.trim();
-                        } else {
-                            tuanText.textContent = 'Chưa có thông tin';
-                        }
-                    })
-                    .catch(error => {
-                        console.log('Chưa có file tuan.txt hoặc nội dung trống.');
-                        tuanText.textContent = 'Chưa có dữ liệu (Hãy tạo file tuan.txt)';
-                    });
+                    .then(response => { if (!response.ok) throw new Error('Không tìm thấy'); return response.text(); })
+                    .then(text => { tuanText.textContent = text.trim() !== '' ? text.trim() : 'Chưa có thông tin'; })
+                    .catch(() => { tuanText.textContent = 'Chưa có dữ liệu'; });
             }
-            
-            // Gọi hàm tải thông tin tuần ngay khi trang vừa tải
             loadTuanInfo();
 
-            // Hàm xử lý khi đổi tab
             function handleRouting() {
                 let hash = window.location.hash.substring(1);
-                if (!TKB_FILES[hash]) {
-                    hash = TKB_FILES.default;
-                    window.location.hash = hash;
-                    return;
-                }
-
-                // Cập nhật UI nút bấm
-                navLinks.forEach(link => {
-                    if (link.getAttribute('href') === '#' + hash) {
-                        link.classList.add('active');
-                    } else {
-                        link.classList.remove('active');
-                    }
-                });
-
-                // TẢI ẢNH VÀ CHỐNG CACHE
+                if (!TKB_FILES[hash]) { hash = TKB_FILES.default; window.location.hash = hash; return; }
+                navLinks.forEach(link => { link.classList.toggle('active', link.getAttribute('href') === '#' + hash); });
                 loadTkbImage(TKB_FILES[hash]);
             }
 
             function loadTkbImage(filename) {
-                // Hiện loading, ẩn ảnh và lỗi
-                loading.classList.remove('hidden');
-                mainImg.classList.add('hidden');
-                errorMsg.classList.add('hidden');
-
-                // TẠO URL CHỐNG CACHE (Cache-Busting)
-                // Thêm chuỗi ?v=thời_gian_hiện_tại vào sau tên file. 
-                // Việc này khiến Github/Trình duyệt tưởng đây là file mới và bắt buộc tải lại ảnh mới nhất.
-                const cacheBuster = new Date().getTime(); 
-                const imageUrl = `${filename}?v=${cacheBuster}`;
-
-                // Tạo đối tượng Image mới để tải ngầm
+                loading.classList.remove('hidden'); mainImg.classList.add('hidden'); errorMsg.classList.add('hidden');
                 const tempImg = new Image();
-                tempImg.onload = function() {
-                    mainImg.src = imageUrl;
-                    mainImg.classList.remove('hidden');
-                    loading.classList.add('hidden');
-                };
-                tempImg.onerror = function() {
-                    loading.classList.add('hidden');
-                    errorMsg.classList.remove('hidden');
-                };
-                tempImg.src = imageUrl;
+                tempImg.onload = () => { mainImg.src = tempImg.src; mainImg.classList.remove('hidden'); loading.classList.add('hidden'); };
+                tempImg.onerror = () => { loading.classList.add('hidden'); errorMsg.classList.remove('hidden'); };
+                tempImg.src = `${filename}?v=${new Date().getTime()}`;
             }
 
-            // --- XỬ LÝ LIGHTBOX (ZOOM ẢNH) ---
+            // --- XỬ LÝ LIGHTBOX (ZOOM THÔNG MINH) ---
             const lightbox = document.getElementById('lightbox');
             const lightboxImg = document.getElementById('lightbox-img');
+            const closeBtn = document.getElementById('close-btn');
             let isPanning = false, startX, startY, scrollLeftStart, scrollTopStart;
 
+            // Mở ảnh
             mainImg.addEventListener('click', () => {
                 lightboxImg.src = mainImg.src;
                 lightbox.classList.add('active');
                 lightbox.classList.remove('zoomed-in');
             });
 
+            function closeLightbox() {
+                lightbox.classList.remove('active');
+                lightbox.classList.remove('zoomed-in');
+            }
+
+            // Đóng ảnh
+            closeBtn.addEventListener('click', closeLightbox);
             lightbox.addEventListener('click', (e) => {
-                if (e.target === lightbox) {
-                    lightbox.classList.remove('active');
-                }
+                if (e.target === lightbox) closeLightbox(); // Bấm ra ngoài lề đen để đóng
             });
 
+            // Click vào ảnh để phóng to/thu nhỏ
             lightboxImg.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (lightbox.classList.contains('zoomed-in')) {
+                    // Đang to -> Thu nhỏ lại
                     lightbox.classList.remove('zoomed-in');
-                    lightbox.scrollTop = 0; lightbox.scrollLeft = 0;
                 } else {
+                    // Đang nhỏ -> Phóng to lên
+                    // Tính toán tọa độ bấm để cuộn đúng vào điểm đó
+                    const rect = lightboxImg.getBoundingClientRect();
+                    const clickXRatio = (e.clientX - rect.left) / rect.width;
+                    const clickYRatio = (e.clientY - rect.top) / rect.height;
+
                     lightbox.classList.add('zoomed-in');
+
+                    // Đợi trình duyệt render kích thước mới rồi tự động cuộn đến điểm bấm
+                    setTimeout(() => {
+                        const newWidth = lightboxImg.offsetWidth;
+                        const newHeight = lightboxImg.offsetHeight;
+                        lightbox.scrollLeft = (newWidth * clickXRatio) - (window.innerWidth / 2);
+                        lightbox.scrollTop = (newHeight * clickYRatio) - (window.innerHeight / 2);
+                    }, 50);
                 }
             });
 
+            // Kéo thả (Pan) khi đã phóng to trên máy tính
             lightboxImg.addEventListener('mousedown', (e) => {
                 if (!lightbox.classList.contains('zoomed-in')) return;
                 e.preventDefault(); 
                 isPanning = true; 
-                lightboxImg.style.cursor = 'grabbing'; 
                 startX = e.pageX; startY = e.pageY; 
                 scrollLeftStart = lightbox.scrollLeft; scrollTopStart = lightbox.scrollTop;
             });
-
-            window.addEventListener('mouseup', () => { if (isPanning) { isPanning = false; lightboxImg.style.cursor = 'grab'; } });
+            window.addEventListener('mouseup', () => { isPanning = false; });
             window.addEventListener('mousemove', (e) => {
                 if (!isPanning) return; 
                 e.preventDefault(); 
@@ -238,10 +238,7 @@
                 lightbox.scrollLeft = scrollLeftStart - walkX; lightbox.scrollTop = scrollTopStart - walkY;
             });
 
-            // Lắng nghe sự thay đổi URL (Hash)
             window.addEventListener('hashchange', handleRouting);
-            
-            // Khởi chạy lần đầu
             handleRouting();
         });
     </script>
