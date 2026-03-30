@@ -41,31 +41,39 @@
             transition: opacity 0.3s ease;
         }
         
-        /* Lightbox CSS */
+        /* Lightbox CSS - Fullscreen Mode */
         #lightbox {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.9);
+            background-color: #000; /* Nền đen tuyền xem tập trung hơn */
             z-index: 1000;
-            overflow: auto;
+            overflow: hidden; /* Tắt cuộn thừa */
             align-items: center;
             justify-content: center;
         }
         #lightbox.active { display: flex; }
         #lightbox img {
-            max-width: 90%;
-            max-height: 90vh;
-            object-fit: contain;
-            transition: transform 0.2s ease;
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Tự động vừa vặn khít màn hình */
             cursor: zoom-out;
         }
-        #lightbox.zoomed-in img {
-            max-width: none;
-            max-height: none;
-            cursor: grab;
+        /* Nút đóng (X) góc phải trên */
+        #close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 2rem;
+            width: 40px; height: 40px;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 1010;
         }
-        #lightbox.zoomed-in img:active { cursor: grabbing; }
+        #close-btn:hover { background: rgba(255,255,255,0.4); }
 
         .loader {
             border: 4px solid #f3f3f3; border-top: 4px solid #4f46e5; border-radius: 50%;
@@ -78,7 +86,7 @@
 <body class="antialiased min-h-screen p-4 md:p-8">
 
     <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-4 md:p-6">
-        <h1 class="text-2xl md:text-3xl font-bold text-center text-gray-800 mb-2">Thời Khóa Biểu Trường THCS Vạn Linh</h1>
+        <h1 class="text-2xl md:text-3xl font-bold text-center text-gray-800 mb-2">Thời Khóa Biểu Của Tôi</h1>
         
         <!-- Hiển thị thông tin Tuần (Mặc định hiển thị) -->
         <p id="tuan-info" class="text-center text-gray-600 font-medium mb-6">
@@ -100,8 +108,9 @@
         </div>
     </div>
 
-    <!-- Lightbox cho tính năng Zoom -->
+    <!-- Lightbox Fullscreen -->
     <div id="lightbox">
+        <div id="close-btn">&times;</div>
         <img id="lightbox-img" src="" alt="Zoomed TKB">
     </div>
 
@@ -194,48 +203,40 @@
                 tempImg.src = imageUrl;
             }
 
-            // --- XỬ LÝ LIGHTBOX (ZOOM ẢNH) ---
+            // --- XỬ LÝ LIGHTBOX (FULLSCREEN ẢNH) ---
             const lightbox = document.getElementById('lightbox');
             const lightboxImg = document.getElementById('lightbox-img');
-            let isPanning = false, startX, startY, scrollLeftStart, scrollTopStart;
+            const closeBtn = document.getElementById('close-btn');
 
             mainImg.addEventListener('click', () => {
                 lightboxImg.src = mainImg.src;
                 lightbox.classList.add('active');
-                lightbox.classList.remove('zoomed-in');
+                
+                // Mở Fullscreen (Tràn viền, ẩn thanh trình duyệt trên điện thoại)
+                if (lightbox.requestFullscreen) {
+                    lightbox.requestFullscreen().catch(err => console.log(err));
+                } else if (lightbox.webkitRequestFullscreen) { /* Cho Safari/iOS */
+                    lightbox.webkitRequestFullscreen();
+                }
             });
 
+            // Hàm đóng lightbox và thoát fullscreen
+            function closeLightbox() {
+                lightbox.classList.remove('active');
+                if (document.fullscreenElement || document.webkitFullscreenElement) {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    }
+                }
+            }
+
+            // Đóng khi bấm vào nút X, nền đen, hoặc bấm trực tiếp vào ảnh
             lightbox.addEventListener('click', (e) => {
-                if (e.target === lightbox) {
-                    lightbox.classList.remove('active');
+                if (e.target === lightbox || e.target === closeBtn || e.target === lightboxImg) {
+                    closeLightbox();
                 }
-            });
-
-            lightboxImg.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (lightbox.classList.contains('zoomed-in')) {
-                    lightbox.classList.remove('zoomed-in');
-                    lightbox.scrollTop = 0; lightbox.scrollLeft = 0;
-                } else {
-                    lightbox.classList.add('zoomed-in');
-                }
-            });
-
-            lightboxImg.addEventListener('mousedown', (e) => {
-                if (!lightbox.classList.contains('zoomed-in')) return;
-                e.preventDefault(); 
-                isPanning = true; 
-                lightboxImg.style.cursor = 'grabbing'; 
-                startX = e.pageX; startY = e.pageY; 
-                scrollLeftStart = lightbox.scrollLeft; scrollTopStart = lightbox.scrollTop;
-            });
-
-            window.addEventListener('mouseup', () => { if (isPanning) { isPanning = false; lightboxImg.style.cursor = 'grab'; } });
-            window.addEventListener('mousemove', (e) => {
-                if (!isPanning) return; 
-                e.preventDefault(); 
-                const walkX = e.pageX - startX; const walkY = e.pageY - startY; 
-                lightbox.scrollLeft = scrollLeftStart - walkX; lightbox.scrollTop = scrollTopStart - walkY;
             });
 
             // Lắng nghe sự thay đổi URL (Hash)
